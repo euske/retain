@@ -7,12 +7,13 @@ import flash.geom.Rectangle;
 import flash.events.Event;
 import flash.events.MouseEvent;
 import flash.ui.Keyboard;
-import flash.utils.getTimer;
+import baseui.Utils;
 import baseui.Screen;
 import baseui.ScreenEvent;
 import baseui.SoundPlayer;
 import baseui.PlayListItem;
-
+  
+  
 //  GameScreen
 //
 public class GameScreen extends Screen
@@ -24,6 +25,7 @@ public class GameScreen extends Screen
   private const FINISHED:String = "FINISHED";
 
   private var _shared:SharedInfo;
+  private var _target:Target;
   private var _course:Course;
   private var _status:Status;
   private var _title:Guide;
@@ -33,13 +35,16 @@ public class GameScreen extends Screen
   private var _state:String;
   private var _tutorial:int;
   private var _ticks:int;
+  private var _vx:int;
+  private var _vy:int;
 
   public function GameScreen(width:int, height:int, shared:Object)
   {
     super(width, height, shared);
     _shared = SharedInfo(shared);
 
-    _course = new Course(200, 200);
+    _target = new Target(40, 40);
+    _course = new Course(200, 200, _target);
     _course.x = (width-_course.width)/2;
     _course.y = (height-_course.height)/2;
     addChild(_course);
@@ -62,8 +67,8 @@ public class GameScreen extends Screen
     _soundman = new SoundPlayer();
 
     addEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
-}
-
+  }
+  
   // open()
   public override function open():void
   {
@@ -100,7 +105,7 @@ public class GameScreen extends Screen
   public override function update():void
   {
     if (_state == STARTED) {
-      updateGame();
+      updateGame(_ticks);
     }
     _ticks++;
   }
@@ -123,9 +128,11 @@ public class GameScreen extends Screen
     _state = STARTED;
   }
 
-  // updateGame()
-  private function updateGame():void
+  // updateGame(t)
+  private function updateGame(t:int):void
   {
+    _target.update(t, _vx, _vy);
+    _course.update(t);
   }
 
   // gameOver()
@@ -160,31 +167,47 @@ public class GameScreen extends Screen
     _title.hide();
     _guide.hide();
     _soundman.reset();
-    switch (_state) {
-    case UNINITED:
-      break;
-    case GOALED:
-      break;
-    case STARTED:
+    if (_state == INITED) {
+      startGame();
+    } else if (_state == STARTED) {
       switch (keycode) {
       case Keyboard.F1:		// Cheat
-      break;
-
+	break;
       case Keyboard.LEFT:
+	_vx = -1;
 	break;
       case Keyboard.RIGHT:
+	_vx = +1;
 	break;
       case Keyboard.UP:
+	_vy = +1;
 	break;
       case Keyboard.DOWN:
+	_vy = -1;
 	break;
       case Keyboard.SPACE:
 	break;
       }
-      break;
     }
   }
 
+  // keyup(keycode)
+  public override function keyup(keycode:int):void
+  {
+    if (_state == STARTED) {
+      switch (keycode) {
+      case Keyboard.LEFT:
+      case Keyboard.RIGHT:
+	_vx = 0;
+	break;
+      case Keyboard.UP:
+      case Keyboard.DOWN:
+	_vy = 0;
+	break;
+      }
+    }
+  }
+  
   // onMouseDown
   private function onMouseDown(e:MouseEvent):void
   {
@@ -194,6 +217,9 @@ public class GameScreen extends Screen
     switch (_state) {
     case UNINITED:
       initGame();
+      return;
+    case INITED:
+      startGame();
       return;
     case GOALED:
       return;
@@ -214,8 +240,12 @@ import flash.display.Sprite;
 import flash.display.Bitmap;
 import flash.media.Sound;
 import flash.utils.Dictionary;
+import flash.utils.getTimer;
 import baseui.Font;
+import baseui.Utils;
 import baseui.SoundPlayer;
+import baseui.SoundGenerator;
+import baseui.SampleGenerator;
 
 
 //  Status
@@ -225,7 +255,7 @@ class Status extends Sprite
   public var level:int;
   public var health:int;
   public var time:int;
-
+  
   private var _text:Bitmap;
 
   public function Status()
@@ -322,11 +352,103 @@ class SoundGuide extends Guide
 // 
 class Course extends Sprite
 {
-  public function Course(width:int, height:int)
+  private var _width:int;
+  private var _height:int;
+  private var _target:Target;
+  
+  public function Course(width:int, height:int, target:Target)
   {
-    graphics.beginFill(0);
-    graphics.drawRect(0, 0, width, height);
+    _width = width;
+    _height = height;
+    graphics.beginFill(0x000044);
+    graphics.drawRect(0, 0, _width, _height);
     graphics.endFill();
+
+    _target = target;
+    addChild(_target);
+    update(0);
   }
 
+  public function update(ticks:int):void
+  {
+    _target.x = (_width*(1+_target.ax)-_target.width)/2;
+    _target.y = (_height*(1-_target.ay)-_target.height)/2;
+  }
+}
+
+class Target extends Sprite
+{
+  private const DC:Number = -Math.log(3);
+  private const FC:Number = Math.log(5);
+  
+  private var _ax:Number;
+  private var _ay:Number;
+  private var _t0:int;
+  private var _tnext:int;
+
+  public var speed:Number = 0.5;
+
+  public function Target(
+    width:int, height:int,
+    color:uint=0xffffff)
+  {
+    _ax = _ay = 0;
+    _tnext = 0;
+
+    graphics.lineStyle(1, color);
+
+    graphics.moveTo(width*0.5, height*0.0);
+    graphics.lineTo(width*0.5, height*0.3);
+    graphics.moveTo(width*0.5, height*0.7);
+    graphics.lineTo(width*0.5, height*1.0);
+    graphics.moveTo(width*0.0, height*0.5);
+    graphics.lineTo(width*0.3, height*0.5);
+    graphics.moveTo(width*0.7, height*0.5);
+    graphics.lineTo(width*1.0, height*0.5);
+  }
+
+  public function get ax():Number
+  {
+    return _ax;
+  }
+  public function get ay():Number
+  {
+    return _ay;
+  }
+
+  private function makeSound(
+    tone:SampleGenerator, 
+    envelope:SampleGenerator):Sound
+  {
+    var sound:SoundGenerator = new SoundGenerator();
+    sound.tone = tone;
+    sound.envelope = envelope;
+    return sound;
+  }
+
+  public function update(ticks:int, vx:int, vy:int):void
+  {
+    var t:int = getTimer();
+    if (_t0 == 0) { _t0 = t; }
+    
+    var dt:Number = (t-_t0)*0.001;
+    if (_tnext < t) {
+      var dur:Number = 0.2*Math.exp(DC*_ax);
+      var freq:Number = 440*Math.exp(FC*_ay);
+      var sound:Sound = makeSound(
+	SoundGenerator.ConstSineTone(freq),
+	SoundGenerator.CutoffEnvelope(dur));
+      sound.play(0, 0, Utils.soundTransform(0, _ax*1.5));
+      _tnext = t+dur*2000;
+    }
+    _t0 = t;
+
+    _ax += (Utils.rnd(3)-1)*dt*speed;
+    _ax += vx*dt*speed;
+    _ax = Math.max(-1.0, Math.min(1.0, _ax));
+
+    _ay += (Utils.rnd(3)-1)*dt*speed;
+    _ay += vy*dt*speed;
+    _ay = Math.max(-1.0, Math.min(1.0, _ay));
+  }
 }
