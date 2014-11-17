@@ -66,7 +66,12 @@ public class GameScreen extends Screen
 
     _soundman = new SoundPlayer();
 
+    graphics.beginFill(0, 0);
+    graphics.drawRect(0, 0, width, height);
+    graphics.endFill();
+
     addEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
+    addEventListener(MouseEvent.MOUSE_UP, onMouseUp);
   }
   
   // open()
@@ -211,18 +216,42 @@ public class GameScreen extends Screen
   // onMouseDown
   private function onMouseDown(e:MouseEvent):void
   {
+    trace("e="+e);
+    switch (_state) {
+    case STARTED:
+      if (e.stageX < _course.x) {
+	_vx = -1;
+      } else if (_course.x+_course.width < e.stageX) {
+	_vx = +1;
+      }      
+      if (e.stageY < _course.y) {
+	_vy = +1;
+      } else if (_course.y+_course.height < e.stageY) {
+	_vy = -1;
+      }      
+      break;
+    }
+  }
+  
+  // onMouseUp
+  private function onMouseUp(e:MouseEvent):void
+  {
     _title.hide();
     _guide.hide();
     _soundman.reset();
     switch (_state) {
     case UNINITED:
       initGame();
-      return;
+      break;
     case INITED:
       startGame();
-      return;
+      break;
+    case STARTED:
+      _vx = 0;
+      _vy = 0;
+      break;
     case GOALED:
-      return;
+      break;
     }
   }
 
